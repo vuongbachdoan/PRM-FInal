@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   SafeAreaView,
   View,
@@ -10,27 +10,25 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
-  Alert,
-  ScrollView,  // Import ScrollView
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NavigationProp } from "@react-navigation/native";
-import { useFocusEffect, useRouter } from "expo-router";
+import useArtData from "@/hooks/useArtData";
+import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import useMyData from "@/hooks/useMyData";
 
 type HomeScreenProps = {
   navigation: NavigationProp<any>;
 };
 
 const HomeScreen: React.FC<HomeScreenProps> = () => {
-  const { players, filterByTeam } = useMyData();
+  const { artTools, filterByBrand } = useArtData();
   const [favorites, setFavorites] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filteredArtTools, setFilteredArtTools] = useState(players);
-  const [selectedTeam, setSelectedTeam] = useState("All");
+  const [filteredArtTools, setFilteredArtTools] = useState(artTools);
+  const [selectedBrand, setSelectedBrand] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Loading state
 
   const router = useRouter();
 
@@ -38,20 +36,13 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
     loadFavorites();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      console.log("Home Focus")
-      loadFavorites();
-    }, [])
-  )
-
   useEffect(() => {
     filterArtTools();
-  }, [searchTerm, players]);
+  }, [searchTerm, artTools]);
 
   useEffect(() => {
-    filterByTeam(selectedTeam === "All" ? "" : selectedTeam);
-  }, [selectedTeam]);
+    filterByBrand(selectedBrand === "All" ? "" : selectedBrand);
+  }, [selectedBrand]);
 
   const loadFavorites = async () => {
     try {
@@ -59,10 +50,10 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
       if (storedFavorites) {
         setFavorites(JSON.parse(storedFavorites));
       }
-      setLoading(false);
+      setLoading(false); // Set loading to false after favorites are loaded
     } catch (error) {
       console.error("Failed to load favorites", error);
-      setLoading(false);
+      setLoading(false); // Ensure loading is set to false on error
     }
   };
 
@@ -75,78 +66,79 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   };
 
   const toggleFavorite = (id: string) => {
-    const isFavorite = favorites.includes(id);
-    const action = isFavorite ? "remove from" : "add to";
+    const updatedFavorites = favorites.includes(id)
+      ? favorites.filter((fav) => fav !== id)
+      : [...favorites, id];
 
-    Alert.alert(
-      "Confirm Action",
-      `Are you sure you want to ${action} favorites?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Confirm",
-          onPress: () => {
-            const updatedFavorites = isFavorite
-              ? favorites.filter((fav) => fav !== id)
-              : [...favorites, id];
-            setFavorites(updatedFavorites);
-            storeFavorites(updatedFavorites);
-          },
-        },
-      ]
-    );
+    setFavorites(updatedFavorites);
+    storeFavorites(updatedFavorites);
   };
 
   const filterArtTools = () => {
-    const filtered = players.filter((item) =>
-      item.playerName?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = artTools.filter((item) =>
+      item.artName.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     if (filtered.length === 0 && searchTerm) {
-      console.warn("No player found matching your search.");
+      console.warn("No art tools found matching your search.");
     }
 
     setFilteredArtTools(filtered);
   };
 
-  const handleTeamFilter = (brand: string) => {
-    setSelectedTeam(brand);
+  const handleBrandFilter = (brand: string) => {
+    setSelectedBrand(brand);
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadFavorites();
-    setRefreshing(false);
+    // Simulate fetching new data from an API
+    setTimeout(() => {
+      setRefreshing(false);
+      // Refresh logic here, such as re-fetching data or resetting filters
+    }, 2000);
   };
 
   const renderItem = ({ item }: { item: any }) => {
+    const salePrice =
+      item.limitedTimeDeal > 0
+        ? item.price * (1 - item.limitedTimeDeal)
+        : item.price;
+
     return (
       <TouchableOpacity
         style={styles.cardContainer}
         onPress={() => {
-          router.push({ pathname: "/detail", params: { playerId: item.id } });
+          router.push({ pathname: "/detail", params: { artId: item.id } });
         }}
-        accessibilityLabel={`View details of ${item.artName}`}
+        accessibilityLabel={`View details of ${item.artName}`} // Accessibility label
       >
         <Image source={{ uri: item.image }} style={styles.image} />
         <View style={styles.textContainer}>
-          <Text style={styles.playerName} numberOfLines={2}>
-            {item.playerName}
+          <Text style={styles.artName} numberOfLines={2}>
+            {item.artName}
           </Text>
-          <Text style={styles.teamName} numberOfLines={2}>
-            {item.teamName}
-          </Text>
-          <Text style={styles.position} numberOfLines={2}>
-            {item.position}
-          </Text>
-          <Text style={styles.age} numberOfLines={2}>
-            {item.age} yrs
-          </Text>
-        </View>
+          <View style={styles.priceContainer}>
+            {item.limitedTimeDeal > 0 ? (
+              <>
+                <Text style={styles.priceOld}>${item.price.toFixed(2)}</Text>
+                <Text style={styles.salePrice}> ${salePrice.toFixed(2)}</Text>
+              </>
+            ) : (
+              <Text style={styles.salePrice}>Price: ${item.price.toFixed(2)}</Text>
+            )}
+          </View>
 
+          {item.limitedTimeDeal > 0 && (
+            <View style={styles.dealContainer}>
+              <Ionicons name="pricetag" size={16} color="#FF9900" />
+              <Text style={styles.priceDeal}>
+                {" "}
+                - ${Math.round(item.price * item.limitedTimeDeal).toFixed(2)}
+              </Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           style={styles.favoriteIcon}
           onPress={() => toggleFavorite(item.id)}
@@ -172,45 +164,43 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         <>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search Player"
+            placeholder="Search Art Tools"
             value={searchTerm}
             onChangeText={setSearchTerm}
           />
           <FlatList
             data={filteredArtTools}
-            keyExtractor={(item) => item.playerName}
+            keyExtractor={(item) => item.id}
             renderItem={renderItem}
             numColumns={2}
             columnWrapperStyle={styles.row}
             ListHeaderComponent={
               <View style={styles.brandFilterContainer}>
                 <Text style={styles.filterTitle}>Filter</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.tagContainer}>
-                    {["All", "Manchester City", "Liverpool", "Chelsea", "Manchester United", "Arsenal", "Tottenham Hotspur"].map(
-                      (teamName) => (
-                        <TouchableOpacity
-                          key={teamName}
+                <View style={styles.tagContainer}>
+                  {["All", "Arteza", "Color Splash", "Edding", "KingArt"].map(
+                    (brand) => (
+                      <TouchableOpacity
+                        key={brand}
+                        style={[
+                          styles.tag,
+                          selectedBrand === brand && styles.selectedTag,
+                        ]}
+                        onPress={() => handleBrandFilter(brand)}
+                        accessibilityLabel={`Filter by ${brand}`}
+                      >
+                        <Text
                           style={[
-                            styles.tag,
-                            selectedTeam === teamName && styles.selectedTag,
+                            styles.tagText,
+                            selectedBrand === brand && styles.selectedTagText,
                           ]}
-                          onPress={() => handleTeamFilter(teamName)}
-                          accessibilityLabel={`Filter by ${teamName}`}
                         >
-                          <Text
-                            style={[
-                              styles.tagText,
-                              selectedTeam === teamName && styles.selectedTagText,
-                            ]}
-                          >
-                            {teamName}
-                          </Text>
-                        </TouchableOpacity>
-                      )
-                    )}
-                  </View>
-                </ScrollView>
+                          {brand}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
               </View>
             }
             refreshControl={
@@ -243,33 +233,8 @@ const styles = StyleSheet.create({
   textContainer: {
     alignItems: "flex-start",
   },
-  playerName: {
+  artName: {
     fontSize: 16,
-    fontWeight: "600",
-    textAlign: "left",
-    overflow: "hidden",
-    paddingBottom: 5,
-  },
-  teamName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: '#808080',
-    textAlign: "left",
-    overflow: "hidden",
-    paddingBottom: 5,
-  },
-  position: {
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "left",
-    overflow: "hidden",
-    padding: 5,
-    marginBottom: 5,
-    backgroundColor: '#CCC',
-    borderRadius: 4
-  },
-  age: {
-    fontSize: 12,
     fontWeight: "600",
     textAlign: "left",
     overflow: "hidden",
@@ -316,6 +281,7 @@ const styles = StyleSheet.create({
   },
   tagContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
   },
   tag: {
     borderWidth: 2,
@@ -323,17 +289,30 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingVertical: 8,
     paddingHorizontal: 15,
-    marginRight: 10,
+    marginRight: 8,
+    marginBottom: 8,
   },
   selectedTag: {
     backgroundColor: "#FF9900",
   },
   tagText: {
-    fontWeight: "600",
+    fontSize: 16,
     color: "#FF9900",
+    fontWeight: "600",
   },
   selectedTagText: {
-    color: "#FFF",
+    color: "#fff",
+  },
+  row: {
+    justifyContent: "space-between",
+  },
+  searchInput: {
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 8,
+    margin: 10,
+    paddingLeft: 10,
   },
   favoriteIcon: {
     position: "absolute",
@@ -341,22 +320,9 @@ const styles = StyleSheet.create({
     right: 10,
   },
   iconBackground: {
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    borderRadius: 50,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    borderRadius: 20,
     padding: 5,
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 5,
-    padding: 10,
-    margin: 15,
-    fontSize: 16,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between", 
-    marginVertical: 10, 
   },
 });
 
